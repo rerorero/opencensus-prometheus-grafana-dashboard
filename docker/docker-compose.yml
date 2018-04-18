@@ -1,0 +1,40 @@
+version: '3'
+services:
+  grpc-server:
+    build:
+      context: ./grpc
+    command: "/bin/server --port 18888 --exporter-port 19000"
+    ports:
+      - "18888:18888"
+      - "19000:19000"
+
+  grpc-client:
+    build:
+      context: ./grpc
+    command: "/bin/client --addr 'grpc-server:18888' --exporter-port 19001 --sec 360"
+    ports:
+      - "19001:19001"
+    depends_on:
+      - grpc-server
+
+  prometheus:
+    image: prom/prometheus:v2.2.1
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - grpc-client
+      - grpc-server
+
+  grafana:
+    image: grafana/grafana:5.0.3
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml"
+      #- "./dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    depends_on:
+      - prometheus
