@@ -33,7 +33,6 @@ services:
       - "3000:3000"
     volumes:
       - "./datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml"
-      #- "./dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
     depends_on:
