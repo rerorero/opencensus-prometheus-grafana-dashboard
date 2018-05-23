@@ -3,8 +3,9 @@ package com.github.rerorero.Main
 import akka.actor.ActorSystem
 import akka.http.scaladsl.ClientTransport
 import akka.http.scaladsl.Http.OutgoingConnection
-import akka.http.scaladsl.model.{ErrorInfo, HttpMethod, ParsingException, StatusCodes}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.settings.{ClientConnectionSettings, ParserSettings}
+import akka.parboiled2.CharPredicate
 import akka.stream.scaladsl.{BidiFlow, Flow, Keep}
 import akka.stream.stage._
 import akka.stream.{Attributes, BidiShape, Inlet, Outlet}
@@ -27,6 +28,17 @@ class CensusGraph(host: String, settings: ClientConnectionSettings) extends Grap
       override def onPush() = {
         val v = grab(sslIn)
         log.error("natoring: outgoing request: " + host + ":" + v.utf8String)
+        val r = HttpParser.parseRequestMethod(v, 0, settings.parserSettings)
+        r match {
+          case Success(s) =>
+            log.error("natoring parser succeed: ")
+            log.error(s._1.toString)
+            log.error(s._1.value)
+            log.error(s._2.toString)
+          case Failure(e) =>
+            log.error(e, "natoring parser failre: ")
+        }
+
         push(bytesOut, v)
       }
       override def onUpstreamFinish(): Unit = complete(bytesOut)
@@ -67,19 +79,34 @@ object AkkaHttpCensusStats {
         .mapMaterializedValue(s => s)
     }
   }
+}
+
+class HttpRequestParser {
+  private[this] var uri: Uri = _
+  private[this] var uriBytes: ByteString = _
+}
+
+object HttpRequestParser {
+  def CR = '\r'
+  def HTAB = '\t'
+  def LF = '\n'
+  def SP = ' '
+  val WSP = CharPredicate(SP, HTAB)
+  val WSPCRLF = WSP ++ CR ++ LF
 
   def byteChar(input: ByteString, ix: Int): Char = byteAt(input, ix).toChar
+
   def byteAt(input: ByteString, ix: Int): Byte =
     if (ix < input.length) input(ix) else throw new StringIndexOutOfBoundsException()
 
   // ref. https://github.com/akka/akka-http/blob/f3e83935ffc27bc94f586d9387b54b499c6250d4/akka-http-core/src/main/scala/akka/http/impl/engine/parsing/HttpRequestParser.scala#L82
-  def parseMethod(input: ByteString, cursor: Int, settings: ParserSettings): Try[HttpMethod] = {
-    @tailrec def parseCustomMethod(ix: Int = 0, sb: StringBuilder = new StringBuilder(16)): Try[HttpMethod] =
+  def parseRequestMethod(input: ByteString, cursor: Int, settings: ParserSettings): Try[(HttpMethod, Int)] = {
+    @tailrec def parseCustomMethod(ix: Int = 0, sb: StringBuilder = new StringBuilder(16)): Try[(HttpMethod, Int)] =
       if (ix < settings.maxMethodLength) {
         byteChar(input, cursor + ix) match {
           case ' ' ⇒
             settings.customMethods(sb.toString) match {
-              case Some(m) => Success(m)
+              case Some(m) => Success((m, cursor + ix + 1))
               case None ⇒ Failure(new ParsingException(ErrorInfo("Unsupported HTTP method", sb.toString)))
             }
           case c ⇒ parseCustomMethod(ix + 1, sb.append(c))
@@ -88,10 +115,10 @@ object AkkaHttpCensusStats {
         ErrorInfo("Unsupported HTTP method", s"HTTP method too long (started with '${sb.toString}'). " +
           "Increase `akka.http.server.parsing.max-method-length` to support HTTP methods with more characters.")))
 
-    @tailrec def parseMethod(meth: HttpMethod, ix: Int = 1): Try[HttpMethod] =
+    @tailrec def parseMethod(meth: HttpMethod, ix: Int = 1): Try[(HttpMethod, Int)] =
       if (ix == meth.value.length)
         if (byteChar(input, cursor + ix) == ' ')
-          Success(meth)
+          Success((meth, cursor + ix + 1))
         else
           parseCustomMethod()
       else if (byteChar(input, cursor + ix) == meth.value.charAt(ix)) parseMethod(meth, ix + 1)
@@ -113,5 +140,33 @@ object AkkaHttpCensusStats {
       case 'C' ⇒ parseMethod(CONNECT)
       case _   ⇒ parseCustomMethod()
     }
+  }
+
+  def parseRequestTarget(input: ByteString, cursor: Int, settings: ParserSettings): Try[(String, Int)] = {
+    val uriStart = cursor
+    val uriEndLimit = cursor + settings.maxUriLength
+
+    @tailrec def findUriEnd(ix: Int = cursor): Try[Int] = {
+      if (ix == input.length) Failure(new StringIndexOutOfBoundsException())
+      else if (WSPCRLF(input(ix).toChar)) Success(ix)
+      else if (ix < uriEndLimit) findUriEnd(ix + 1)
+      else Failure(new ParsingException(
+        ErrorInfo(s"Request URI is too long: URI length exceeds the configured limit of ${settings.maxUriLength} characters")
+    }
+
+    findUriEnd().map { uriEnd =>
+      uriBytes = input.slice(uriStart, uriEnd)
+      uri = Uri.parseHttpRequestTarget(new ByteStringParserInput(uriBytes), mode = uriParsingMode)
+    }
+
+
+          .map {
+
+    }
+    try {
+    } catch {
+      case IllegalUriException(info) ⇒ throw new ParsingException(BadRequest, info)
+    }
+    uriEnd + 1
   }
 }

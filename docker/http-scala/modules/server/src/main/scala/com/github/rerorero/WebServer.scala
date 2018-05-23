@@ -16,7 +16,7 @@ object WebServer {
     implicit val system = ActorSystem("my-system")
     implicit val materializer = ActorMaterializer()
     implicit val ec = system.dispatcher
-    val census = AkkaHttpCensusStats()
+    val census = AkkaHttpCensusServerStats()
 
     val route: Route =
       census.httpStats {
