@@ -13,3 +13,5 @@ scrape_configs:
       - targets: 
         - 'grpc-server:19000'
         - 'grpc-client:19001'
+        - 'http-server:9901'
+        - 'http-client:9910'

@@ -17,6 +17,23 @@ services:
     depends_on:
       - grpc-server
 
+  http-server:
+    build:
+      context: ./http-scala
+    command: "java -Dapp.port=9900 -Dprom.port=9901 -jar /bin/server.jar" 
+    ports:
+      - "9900:9900"
+      - "9901:9901"
+
+  http-client:
+    build:
+      context: ./http-scala
+    command: "java -Ddest.host=http-server -Ddest.port=9900 -Dprom.port=9910 -jar /bin/client.jar"
+    ports:
+      - "9910:9910"
+    depends_on:
+      - http-server
+
   prometheus:
     image: prom/prometheus:v2.2.1
     volumes:
@@ -26,6 +43,8 @@ services:
     depends_on:
       - grpc-client
       - grpc-server
+      - http-server
+      - http-client
 
   grafana:
     image: grafana/grafana:5.0.3

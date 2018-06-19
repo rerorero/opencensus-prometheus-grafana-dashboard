@@ -1,7 +1,10 @@
 name := "akka-census"
 
 val commonSettings = Seq(
+  version := "0.1-SNAPSHOT",
   scalaVersion := "2.12.4",
+  organization := "com.github.rerorero",
+  test in assembly := {},
   libraryDependencies ++= Seq(
     "io.opencensus" % "opencensus-exporter-stats-prometheus" % "0.13.2",
     "io.opencensus" % "opencensus-api" % "0.13.2",
@@ -17,9 +20,15 @@ lazy val stats = (project in file("modules/stats"))
   .settings(commonSettings)
 
 lazy val server = (project in file("modules/server"))
-  .settings(commonSettings)
   .dependsOn(stats)
+  .settings(commonSettings)
+  .settings(
+    mainClass in assembly := Some("com.github.rerorero.WebServer")
+  )
 
 lazy val client = (project in file("modules/client"))
-  .settings(commonSettings)
   .dependsOn(stats)
+  .settings(commonSettings)
+  .settings(
+    mainClass in assembly := Some("com.github.rerorero.Client")
+  )

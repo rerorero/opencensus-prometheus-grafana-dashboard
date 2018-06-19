@@ -34,6 +34,8 @@ object HttpClientStatsRecorder {
     val tags = tagger.emptyBuilder()
       .put(HttpMeasureConstants.HTTP_CLIENT_METHOD, TagValue.create(rc.method))
       .put(HttpMeasureConstants.HTTP_CLIENT_STATUS, TagValue.create(response.status.intValue.toString))
+      .put(HttpMeasureConstants.HTTP_CLIENT_HOST, TagValue.create(rc.uri.authority.host.toString))
+      .put(HttpMeasureConstants.HTTP_CLIENT_PATH, TagValue.create(rc.uri.path.toString))
       .build()
 
     var measureMap = statsRecorder.newMeasureMap()
